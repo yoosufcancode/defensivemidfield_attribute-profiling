@@ -8,6 +8,5 @@
 *cpython-312.pyc
 *.png
 *.csv
-*.md
 *.txt
 *.DS_Store
