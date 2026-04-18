@@ -13,7 +13,7 @@ The core thesis: if a scouting model can reliably rank matches by their bypass c
 
 ### Data Source
 
-All event data comes from the **Wyscout Open Dataset** (2017/18 season, five top European leagues). The Barcelona multi-season analysis uses the Wyscout Spain dataset for seasons 2012/13 through 2015/16.
+All event data comes from the **Wyscout Open Dataset** (2017/18 season, five top European leagues). 
 
 ---
 
