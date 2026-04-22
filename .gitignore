@@ -10,3 +10,4 @@
 *.csv
 *.txt
 *.DS_Store
+/production/frontend/node_modules
