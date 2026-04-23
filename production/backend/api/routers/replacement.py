@@ -12,11 +12,12 @@ from pathlib import Path
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 
-from production.backend.api.dependencies import get_task_store, get_executor
-from production.backend.services.task_store import TaskStore
-from production.backend.schemas.replacement import ReplacementRequest
-from production.backend.config import settings
-from production.backend.workers.pipeline_worker import run_stage6
+from api.dependencies import get_task_store, get_executor
+from api.unicode_utils import fix_df_unicode
+from services.task_store import TaskStore
+from schemas.replacement import ReplacementRequest
+from config import settings
+from workers.pipeline_worker import run_stage6
 
 router = APIRouter(prefix="/stage6", tags=["Stage 6 – Replacement Finder"])
 
@@ -49,10 +50,16 @@ async def find_replacements(
         run_stage6(
             job_id=job_id,
             params={
-                "league":       body.league,
-                "team":         body.team,
-                "top_n":        body.top_n,
-                "min_matches":  body.min_matches,
+                "league":                    body.league,
+                "team":                      body.team,
+                "top_n":                     body.top_n,
+                "min_matches":               body.min_matches,
+                "bypass_ceiling_percentile": body.bypass_ceiling_percentile,
+                "scouting_grads":            body.scouting_grads,
+                "scouting_features":         body.scouting_features,
+                "model_selected":            body.model_selected or "",
+                "spearman_test":             body.spearman_test or 0.0,
+                "spearman_train":            body.spearman_train or 0.0,
             },
             store=store,
             executor=executor,
@@ -89,10 +96,10 @@ def list_players():
         if not csv_path.exists():
             continue
         try:
-            df = pd.read_csv(
+            df = fix_df_unicode(pd.read_csv(
                 csv_path,
                 usecols=lambda c: c in {"player_name", "team_name"},
-            )
+            ))
             if "player_name" not in df.columns:
                 continue
             team_col = "team_name" if "team_name" in df.columns else None

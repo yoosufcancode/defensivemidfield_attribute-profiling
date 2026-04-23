@@ -13,6 +13,14 @@ export function PipelineProvider({ children }) {
   const [stage3Result, setStage3Result] = useState(null)
   const [stage4Result, setStage4Result] = useState(null)
   const [stage5Result, setStage5Result] = useState(null)
+  // Per-team model artefacts from Stage 4
+  const [stage4ScoutingGrads, setStage4ScoutingGrads] = useState(null)
+  const [stage4ScoutingFeatures, setStage4ScoutingFeatures] = useState(null)
+  const [stage4League, setStage4League] = useState('')
+  const [stage4Team, setStage4Team] = useState('')
+  const [stage4ModelSelected, setStage4ModelSelected] = useState('')
+  const [stage4SpearmanTest, setStage4SpearmanTest] = useState(0)
+  const [stage4SpearmanTrain, setStage4SpearmanTrain] = useState(0)
 
   const unlock = useCallback((n) => {
     setUnlockedStages(prev => new Set([...prev, n]))
@@ -23,12 +31,9 @@ export function PipelineProvider({ children }) {
   }, [])
 
   const goToStage = useCallback((n) => {
-    setUnlockedStages(prev => {
-      if (!prev.has(n)) return prev
-      setCurrentStage(n)
-      return prev
-    })
-  }, [])
+    if (!unlockedStages.has(n)) return
+    setCurrentStage(n)
+  }, [unlockedStages])
 
   const onStage1Done = useCallback((result) => {
     setStage1Result(result)
@@ -50,6 +55,13 @@ export function PipelineProvider({ children }) {
 
   const onStage4Done = useCallback((result) => {
     setStage4Result(result)
+    if (result?.scouting_grads)     setStage4ScoutingGrads(result.scouting_grads)
+    if (result?.scouting_features)  setStage4ScoutingFeatures(result.scouting_features)
+    if (result?.league)             setStage4League(result.league)
+    if (result?.team)               setStage4Team(result.team)
+    if (result?.best_model)         setStage4ModelSelected(result.best_model)
+    if (result?.spearman_test != null) setStage4SpearmanTest(result.spearman_test)
+    if (result?.spearman_train != null) setStage4SpearmanTrain(result.spearman_train)
     complete(4)
     unlock(5)
   }, [complete, unlock])
@@ -121,6 +133,9 @@ export function PipelineProvider({ children }) {
       unlockedStages, completedStages,
       health,
       stage1Result, stage3Result, stage4Result, stage5Result,
+      stage4ScoutingGrads, stage4ScoutingFeatures,
+      stage4League, stage4Team,
+      stage4ModelSelected, stage4SpearmanTest, stage4SpearmanTrain,
       onStage1Done, onStage2Done, onStage3Done,
       onStage4Done, onStage5Done, onStage6Done,
     }}>

@@ -9,10 +9,10 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from production.backend.api.dependencies import get_task_store, get_executor
-from production.backend.services.task_store import TaskStore
-from production.backend.schemas.model_building import ModelBuildRequest
-from production.backend.workers.pipeline_worker import run_stage4
+from api.dependencies import get_task_store, get_executor
+from services.task_store import TaskStore
+from schemas.model_building import ModelBuildRequest
+from workers.pipeline_worker import run_stage4
 
 router = APIRouter(prefix="/stage4", tags=["Stage 4 – Model Building"])
 
@@ -44,6 +44,8 @@ async def build_models(
             job_id=job_id,
             params={
                 "features_path":     body.features_path,
+                "league":            body.league,
+                "team":              body.team,
                 "selected_features": body.selected_features,
                 "target_col":        body.target_col,
                 "test_size":         body.test_size,

@@ -87,23 +87,36 @@ def rank_features(scores: np.ndarray, feature_names: list[str],
 
 def run_feature_selection(
     features_path: str,
+    team: str,
     target_col: str,
     n_top: int,
     progress_cb: Callable[[int, str], None],
 ) -> dict:
     """
-    Run four selection methods (F-regression, MI, Random Forest, RFE) and return
-    per-method rankings plus a consensus top-N list, persisting results to a sidecar JSON.
+    Run four selection methods (F-regression, MI, Random Forest, RFE) on the
+    target team's half-match rows and return per-method rankings plus a consensus
+    top-N list, persisting results to a team-specific sidecar JSON.
 
     Notebook-aligned steps applied before method runs:
-      1. Aggregate half-match rows (P1/P2) to full-match level per player
-      2. Drop team-level / role-driven confound features
-      3. RFE uses RandomForestRegressor with n_features_to_select=n_top
+      1. Filter to team rows (per-team feature selection)
+      2. Aggregate half-match rows (P1/P2) to full-match level per player
+      3. Drop team-level / role-driven confound features
+      4. RF max_depth bounded to prevent overfitting on team-sized samples
+      5. RFE uses RandomForestRegressor with n_features_to_select=n_top
     """
     progress_cb(5, "Loading dataset")
     df = pd.read_csv(features_path)
 
-    # ── Step 1: Aggregate to match level ──────────────────────────────────────
+    # ── Step 1: Filter to team rows ───────────────────────────────────────────
+    progress_cb(8, f"Filtering to {team} rows")
+    if "team_name" not in df.columns:
+        raise ValueError("Dataset has no 'team_name' column — re-run Stage 1 ingestion.")
+    df = df[df["team_name"] == team].copy()
+    if df.empty:
+        available = sorted(pd.read_csv(features_path)["team_name"].dropna().unique())
+        raise ValueError(f"Team '{team}' not found. Available: {available}")
+
+    # ── Step 2: Aggregate to match level ──────────────────────────────────────
     progress_cb(10, "Aggregating to match level")
     df = _aggregate_to_match_level(df, target_col)
 
@@ -141,15 +154,19 @@ def run_feature_selection(
     mi_scores = mutual_info_regression(X_scaled, y, random_state=42)
     mutual_info = rank_features(mi_scores, feature_cols)
 
-    progress_cb(56, "Running Random Forest importance")
-    rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    # Bound tree depth to prevent overfitting on team-sized samples (~70-200 rows)
+    n_rows = len(df_clean)
+    rf_max_depth = 3 if n_rows < 100 else 5 if n_rows < 300 else None
+
+    progress_cb(56, f"Running Random Forest importance (n={n_rows} rows, max_depth={rf_max_depth})")
+    rf = RandomForestRegressor(n_estimators=100, max_depth=rf_max_depth, min_samples_leaf=3, random_state=42, n_jobs=-1)
     rf.fit(X_scaled, y)
     random_forest = rank_features(rf.feature_importances_, feature_cols)
 
     # ── RFE with fixed n_features_to_select (matches notebook) ───────────────
     progress_cb(72, "Running RFE (RandomForest estimator, n_features_to_select=n_top)")
     rfe_estimator = RFE(
-        estimator=RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1),
+        estimator=RandomForestRegressor(n_estimators=50, max_depth=rf_max_depth, min_samples_leaf=3, random_state=42, n_jobs=-1),
         n_features_to_select=n_top,
         step=1,
     )
@@ -204,10 +221,12 @@ def run_feature_selection(
 
     selected_features = [item["feature"] for item in consensus[:n_top]]
 
+    team_slug = team.replace(" ", "_")
     sidecar = Path(features_path).parent / (
-        Path(features_path).stem + "_selected_features.json"
+        Path(features_path).stem + f"_{team_slug}_selected_features.json"
     )
     sidecar.write_text(json.dumps({
+        "team": team,
         "selected_features": selected_features,
         "dropped_confounds": list(drop_cols),
         "n_match_rows": int(len(df_clean)),
@@ -216,6 +235,7 @@ def run_feature_selection(
     progress_cb(100, "Feature selection complete")
 
     return {
+        "team":              team,
         "univariate":        univariate[:n_top],
         "mutual_info":       mutual_info[:n_top],
         "random_forest":     random_forest[:n_top],

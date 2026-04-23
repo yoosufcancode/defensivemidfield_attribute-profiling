@@ -16,6 +16,9 @@ dependencies = [
     "scikit-learn>=1.4.0",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",

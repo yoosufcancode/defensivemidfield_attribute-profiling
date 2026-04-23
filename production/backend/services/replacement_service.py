@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Callable
 
-ROOT = Path(__file__).parent.parent.parent
+ROOT = Path(__file__).parent.parent.parent.parent
 ALL_LEAGUES = ["Spain", "England", "France", "Germany", "Italy"]
 
 
@@ -13,7 +13,13 @@ def run_replacement_analysis(
     league: str,
     team: str,
     top_n: int,
-    min_matches: int = 4,   # aligned with notebook (was 10)
+    min_matches: int = 4,
+    bypass_ceiling_percentile: float | None = None,
+    scouting_grads: dict | None = None,
+    scouting_features: list | None = None,
+    model_selected: str = "",
+    spearman_test: float = 0.0,
+    spearman_train: float = 0.0,
     progress_cb: Callable[[int, str], None] = lambda p, m: None,
 ) -> dict:
     """
@@ -70,38 +76,45 @@ def run_replacement_analysis(
 
     df_all = pd.concat(league_frames, ignore_index=True)
 
-    # ── Step 2: Train/test split on team data, scouting evaluation ───────────
-    progress_cb(20, f"Running scouting evaluation on {team} data")
-    feat_cols = get_feature_cols(df_team)
-    X_sc, y, imp, scaler = prepare_xy(df_team, feat_cols, TARGET_HALF, min_passes=5)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_sc, y, test_size=0.15, random_state=42
-    )
+    # ── Step 2: Scouting evaluation — use Stage 4 pre-computed grads or re-train
+    if scouting_grads:
+        # Stage 4 already built the per-team model — use its gradients directly
+        progress_cb(20, f"Using Stage 4 model for {team} (skipping re-training)")
+        best_model_name = model_selected or "Unknown"
+        grad_df = None   # not needed; scouting_features list was passed in directly
+    else:
+        progress_cb(20, f"Running scouting evaluation on {team} data")
+        feat_cols = get_feature_cols(df_team)
+        X_sc, y, imp, scaler = prepare_xy(df_team, feat_cols, TARGET_HALF, min_passes=5)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_sc, y, test_size=0.15, random_state=42
+        )
 
-    scout_result = run_scouting_evaluation(X_train, y_train, X_test, y_test)
-    scouting_grads   = scout_result["scouting_grads"]
-    grad_df          = scout_result["grad_df"]
-    best_model_name  = scout_result["best_model_name"]
-    spearman_test    = float(scout_result["spearman_test"])
-    spearman_train   = float(scout_result["spearman_train"])
+        scout_result = run_scouting_evaluation(X_train, y_train, X_test, y_test)
+        scouting_grads  = scout_result["scouting_grads"]
+        grad_df         = scout_result["grad_df"]
+        best_model_name = scout_result["best_model_name"]
+        spearman_test   = float(scout_result["spearman_test"])
+        spearman_train  = float(scout_result["spearman_train"])
+
+        # Build scouting_features from grad_df when we trained internally
+        if grad_df is not None:
+            scouting_features = []
+            for _, row in grad_df.iterrows():
+                scouting_features.append({
+                    "feature":         str(row["Feature"]),
+                    "gradient":        float(row["Gradient (dy/dx)"]),
+                    "direction":       str(row["scouting_direction"]),
+                    "p_value":         float(row["p_value"]),
+                    "sign_stable":     bool(row["sign_stable"]),
+                    "confidence_tier": str(row["confidence_tier"]),
+                })
 
     if not scouting_grads:
         raise RuntimeError(
             "No scouting features passed stability + significance filters. "
-            "Cannot rank players. Try providing more data."
+            "Cannot rank players. Try providing more data or run Stage 4 first."
         )
-
-    # Build scouting_features list for the response
-    scouting_features = []
-    for _, row in grad_df.iterrows():
-        scouting_features.append({
-            "feature":         str(row["Feature"]),
-            "gradient":        float(row["Gradient (dy/dx)"]),
-            "direction":       str(row["scouting_direction"]),
-            "p_value":         float(row["p_value"]),
-            "sign_stable":     bool(row["sign_stable"]),
-            "confidence_tier": str(row["confidence_tier"]),
-        })
 
     # ── Step 3: Score all players ─────────────────────────────────────────────
     progress_cb(40, "Scoring all players in the candidate pool")
@@ -118,7 +131,7 @@ def run_replacement_analysis(
     feats = list(scouting_grads.keys())
 
     squad = []
-    for _, row in team_players.sort_values("bypass_score").iterrows():
+    for _, row in team_players.sort_values("bypass_score", ascending=False).iterrows():
         avg_x = (
             float(row["average_position_x"])
             if "average_position_x" in row and pd.notna(row.get("average_position_x"))
@@ -140,20 +153,28 @@ def run_replacement_analysis(
     progress_cb(65, f"Finding top-{top_n} replacements per player")
     candidates = scored[scored["source"] == "Other"].copy()
 
-    # Role-level bypass ceiling from candidate pool
-    role_bypass_medians = (
-        candidates.groupby("tactical_role")[TARGET_HALF]
-        .median()
-        .to_dict()
-    )
+    # Bypass ceiling: fixed percentile (user-supplied) or per-role median (auto)
+    if bypass_ceiling_percentile is not None:
+        _global_ceiling = candidates[TARGET_HALF].quantile(bypass_ceiling_percentile / 100.0)
+        role_bypass_medians = {}  # unused in fixed-ceiling mode
+    else:
+        _global_ceiling = None
+        role_bypass_medians = (
+            candidates.groupby("tactical_role")[TARGET_HALF]
+            .median()
+            .to_dict()
+        )
 
     recommendations = []
 
-    for _, player in team_players.sort_values("bypass_score").iterrows():
+    for _, player in team_players.sort_values("bypass_score", ascending=False).iterrows():
         role   = player.get("tactical_role", "Unknown")
         bucket = player["position_bucket"]
 
-        bypass_ceiling = role_bypass_medians.get(role, candidates[TARGET_HALF].median())
+        if _global_ceiling is not None:
+            bypass_ceiling = _global_ceiling
+        else:
+            bypass_ceiling = role_bypass_medians.get(role, candidates[TARGET_HALF].median())
 
         # Priority 1: exact match — same role AND same position bucket
         pool = candidates[
@@ -260,12 +281,12 @@ def run_replacement_analysis(
     progress_cb(100, "Replacement analysis complete")
 
     return {
-        "league":           league,
-        "team":             team,
-        "model_selected":   best_model_name,
-        "spearman_test":    round(spearman_test, 4),
-        "spearman_train":   round(spearman_train, 4),
-        "scouting_features": scouting_features,
-        "squad":            squad,
-        "recommendations":  recommendations,
+        "league":            league,
+        "team":              team,
+        "model_selected":    best_model_name,
+        "spearman_test":     round(float(spearman_test), 4),
+        "spearman_train":    round(float(spearman_train), 4),
+        "scouting_features": scouting_features or [],
+        "squad":             squad,
+        "recommendations":   recommendations,
     }

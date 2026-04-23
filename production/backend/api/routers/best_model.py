@@ -9,10 +9,10 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from production.backend.api.dependencies import get_task_store, get_executor
-from production.backend.services.task_store import TaskStore
-from production.backend.schemas.best_model import BestModelRequest
-from production.backend.workers.pipeline_worker import run_stage5
+from api.dependencies import get_task_store, get_executor
+from services.task_store import TaskStore
+from schemas.best_model import BestModelRequest
+from workers.pipeline_worker import run_stage5
 
 router = APIRouter(prefix="/stage5", tags=["Stage 5 – Best Model Analysis"])
 

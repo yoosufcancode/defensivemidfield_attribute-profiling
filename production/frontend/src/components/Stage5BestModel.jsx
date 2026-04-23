@@ -2,44 +2,47 @@ import { useState, useEffect } from 'react'
 import { usePipeline } from '../context/PipelineContext'
 import { usePoll } from '../hooks/usePoll'
 import { API } from '../lib/api'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Progress } from './ui/progress'
-import { Alert, AlertDescription } from './ui/alert'
-import { Badge } from './ui/badge'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-} from 'recharts'
+import { AlertCircle, ChevronRight } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+
+function StatCard({ label, value, sub, accent }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+      <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#64748B' }}>{label}</p>
+      <p className="text-[28px] font-bold leading-tight" style={{ color: accent ? '#A50044' : '#FFFFFF' }}>{value ?? '—'}</p>
+      {sub && <p className="text-[11px]" style={{ color: '#475569' }}>{sub}</p>}
+    </div>
+  )
+}
 
 export default function Stage5BestModel() {
-  const { onStage5Done, stage1Result, stage3Result, stage4Result } = usePipeline()
+  const { onStage5Done, stage1Result, stage4Result, stage4League } = usePipeline()
   const { polling, progress, message, error, poll, reset } = usePoll()
 
-  const best = stage4Result?.best_model
+  const best   = stage4Result?.best_model
   const models = stage4Result?.models || []
-  const match = models.find(m => m.name === best) || models[0]
+  const match  = models.find(m => m.name === best) || models[0]
 
-  const [modelPath, setModelPath] = useState('')
-  const [scalerPath, setScalerPath] = useState('')
+  const [modelPath, setModelPath]     = useState('')
+  const [scalerPath, setScalerPath]   = useState('')
   const [featuresPath, setFeaturesPath] = useState('')
-  const [targetCol, setTargetCol] = useState('bypasses_per_halftime')
+  const [targetCol] = useState('bypasses_per_halftime')
   const [result, setResult] = useState(null)
 
   useEffect(() => {
-    if (match?.model_path) setModelPath(match.model_path)
-    if (stage4Result?.scaler_path) setScalerPath(stage4Result.scaler_path)
-    const fp = Object.values(stage1Result?.features_paths || {})[0] || ''
-    setFeaturesPath(fp)
-  }, [match, stage4Result, stage1Result])
+    if (match?.model_path)          setModelPath(match.model_path)
+    if (stage4Result?.scaler_path)  setScalerPath(stage4Result.scaler_path)
+    // Use the league-specific features path if available
+    const lg = stage4League || Object.keys(stage1Result?.features_paths || {})[0]
+    setFeaturesPath(lg ? (stage1Result?.features_paths?.[lg] || '') : Object.values(stage1Result?.features_paths || {})[0] || '')
+  }, [match, stage4Result, stage1Result, stage4League])
 
-  const selectedFeatures = stage3Result?.selected_features || []
+  // Stage 4 returns the scout features actually used in the per-team model
+  const selectedFeatures = stage4Result?.available_features || []
 
   async function run() {
-    if (!modelPath || !scalerPath || !featuresPath) return alert('Model path, scaler path, and features path are required.')
-    if (!selectedFeatures.length) return alert('Complete Stage 3 first.')
+    if (!modelPath || !scalerPath || !featuresPath) return alert('Model, scaler and features paths required.')
+    if (!selectedFeatures.length) return alert('Complete Stage 4 (Model Training) first.')
     reset()
     try {
       const r = await fetch(`${API}/stage5/analyze`, {
@@ -48,7 +51,7 @@ export default function Stage5BestModel() {
         body: JSON.stringify({ model_path: modelPath, scaler_path: scalerPath, features_path: featuresPath, selected_features: selectedFeatures, target_col: targetCol }),
       })
       const { job_id } = await r.json()
-      poll(`${API}/stage5/status/${job_id}`, (res) => {
+      poll(`${API}/stage5/status/${job_id}`, res => {
         setResult(res)
         onStage5Done(res)
       })
@@ -58,129 +61,104 @@ export default function Stage5BestModel() {
   }
 
   const coefs = result?.coefficients || []
-  const grad = result?.gradient_sensitivity || []
+  const coefChartData = coefs.slice(0, 10).map(c => ({ feature: c.feature, value: c.coefficient }))
 
-  const coefChartData = coefs.map(c => ({ feature: c.feature, value: c.coefficient }))
+  const stats = [
+    { label: 'Model',          value: result?.model_name ?? best ?? '—',          sub: 'selected model' },
+    { label: 'Features Used',  value: coefs.length || selectedFeatures.length || '—', sub: 'feature coefficients' },
+    { label: 'Top Feature',    value: coefs[0]?.feature?.split('_')[0] ?? '—',    sub: coefs[0]?.feature ?? '', accent: true },
+    { label: 'Gradient Sens.', value: result?.gradient_sensitivity?.length ?? '—', sub: 'sensitivity scores' },
+  ]
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Stage 5 — Best Model Analysis</CardTitle>
-          <CardDescription>Extract coefficients and gradient sensitivity from the best linear model.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { label: 'Model path (auto-filled)', value: modelPath, set: setModelPath, placeholder: 'models/lasso_model.pkl' },
-              { label: 'Scaler path (auto-filled)', value: scalerPath, set: setScalerPath, placeholder: 'models/scaler.pkl' },
-              { label: 'Features path (auto-filled)', value: featuresPath, set: setFeaturesPath, placeholder: 'data/processed/…_features.csv' },
-              { label: 'Target column', value: targetCol, set: setTargetCol, placeholder: 'bypasses_per_halftime' },
-            ].map(({ label, value, set, placeholder }) => (
-              <div key={label} className="space-y-1.5">
-                <Label>{label}</Label>
-                <Input value={value} onChange={e => set(e.target.value)} placeholder={placeholder} />
-              </div>
-            ))}
+    <div className="space-y-5 pt-6 border-t border-border">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-[22px] font-bold text-white">Best Model Analysis</h1>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-xs font-semibold" style={{ color: '#A50044' }}>Stage 5</span>
+            <span className="text-xs" style={{ color: '#475569' }}>·</span>
+            <span className="text-xs" style={{ color: '#64748B' }}>Feature coefficients and gradient sensitivity from the best linear model</span>
           </div>
-          <Button onClick={run} disabled={polling}>
-            {polling ? 'Running…' : 'Analyze Model'}
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
+        <button
+          onClick={run}
+          disabled={polling}
+          className="flex items-center gap-2 text-white disabled:opacity-50 transition-opacity hover:opacity-90"
+          style={{ background: '#A50044', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: polling ? 'not-allowed' : 'pointer' }}
+        >
+          {polling ? 'Running…' : 'Analyse Model'} <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
+      {/* Divider */}
+      <div style={{ height: 1, background: '#1A1A1A' }} />
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        {stats.map(s => <StatCard key={s.label} {...s} />)}
+      </div>
+
+      {/* Progress */}
       {polling && (
-        <Card>
-          <CardContent className="pt-6 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{message}</span>
-              <span className="text-primary font-mono">{progress}%</span>
-            </div>
-            <Progress value={progress} />
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">{message}</span>
+            <span className="font-mono" style={{ color: '#A50044' }}>{progress}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: '#A50044' }} />
+          </div>
+        </div>
       )}
 
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>Error: {error}</AlertDescription>
-        </Alert>
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-red-400">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />{error}
+        </div>
       )}
 
-      {result && (
-        <>
-          <Card>
-            <CardContent className="pt-6 flex items-center gap-2">
-              <span className="text-muted-foreground text-sm">Model:</span>
-              <Badge variant="blue">{result.model_name || '—'}</Badge>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="text-sm">Feature Coefficients (by magnitude)</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={Math.max(220, coefs.length * 32)}>
-                <BarChart data={coefChartData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis type="category" dataKey="feature" tick={{ fill: '#cbd5e1', fontSize: 11 }} tickLine={false} axisLine={false} width={140} />
-                  <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 6 }} />
-                  <Bar dataKey="value" radius={[0, 2, 2, 0]}>
-                    {coefChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.value >= 0 ? '#10b981' : '#ef4444'} opacity={0.85} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="text-sm">Coefficients</CardTitle></CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Feature</TableHead>
-                    <TableHead className="text-right">Coefficient</TableHead>
-                    <TableHead className="text-right">Importance %</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {coefs.map((c, i) => (
-                    <TableRow key={c.feature} className={i % 2 === 0 ? 'bg-secondary/20' : ''}>
-                      <TableCell className="font-mono text-xs">{c.feature}</TableCell>
-                      <TableCell className={`text-right font-mono text-xs ${c.coefficient >= 0 ? 'text-green-400' : 'text-red-400'}`}>{c.coefficient}</TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">{c.relative_importance}%</TableCell>
-                    </TableRow>
+      {result && coefChartData.length > 0 && (
+        <div className="grid grid-cols-2 gap-4">
+          {/* Coefficient chart */}
+          <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-white">Feature Importance (Lasso Coefficients)</h2>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={coefChartData} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 4 }}>
+                <XAxis type="number" tick={{ fill: '#64748B', fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="feature" tick={{ fill: '#64748B', fontSize: 10 }} tickLine={false} axisLine={false} width={130} />
+                <Tooltip
+                  contentStyle={{ background: '#111111', border: '1px solid #1A1A1A', borderRadius: 8, fontSize: 12 }}
+                  formatter={v => v.toFixed(4)}
+                />
+                <Bar dataKey="value" radius={[0, 2, 2, 0]}>
+                  {coefChartData.map((e, i) => (
+                    <Cell key={i} fill={e.value >= 0 ? '#A50044' : '#22C55E'} opacity={0.85} />
                   ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
-          <Card>
-            <CardHeader><CardTitle className="text-sm">Gradient Sensitivity (coef × raw std)</CardTitle></CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Feature</TableHead>
-                    <TableHead className="text-right">Sensitivity</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {grad.map((g, i) => (
-                    <TableRow key={g.feature} className={i % 2 === 0 ? 'bg-secondary/20' : ''}>
-                      <TableCell className="font-mono text-xs">{g.feature}</TableCell>
-                      <TableCell className={`text-right font-mono text-xs ${g.sensitivity >= 0 ? 'text-green-400' : 'text-red-400'}`}>{g.sensitivity}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </>
+          {/* Coefficients table */}
+          <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-white">Feature Groups</h2>
+            <div className="overflow-y-auto max-h-72 space-y-1">
+              {coefs.map((c) => (
+                <div key={c.feature} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                  <span className="text-xs font-mono truncate pr-4" style={{ color: '#64748B' }}>{c.feature}</span>
+                  <div className="flex items-center gap-4 flex-shrink-0">
+                    <span className="text-xs font-mono" style={{ color: c.coefficient >= 0 ? '#A50044' : '#22C55E' }}>
+                      {c.coefficient > 0 ? '+' : ''}{parseFloat(c.coefficient).toFixed(3)}
+                    </span>
+                    <span className="text-xs w-12 text-right" style={{ color: '#64748B' }}>{c.relative_importance}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -9,10 +9,10 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from production.backend.api.dependencies import get_task_store, get_executor
-from production.backend.services.task_store import TaskStore
-from production.backend.schemas.eda import EDARequest
-from production.backend.workers.pipeline_worker import run_stage2
+from api.dependencies import get_task_store, get_executor
+from services.task_store import TaskStore
+from schemas.eda import EDARequest
+from workers.pipeline_worker import run_stage2
 
 router = APIRouter(prefix="/stage2", tags=["Stage 2 – EDA"])
 

@@ -11,8 +11,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from production.backend.config import settings
-from production.backend.api.routers import ingestion, eda, feature_selection, model_building, best_model, replacement
+from config import settings
+from api.routers import ingestion, eda, feature_selection, model_building, best_model, replacement
 
 app = FastAPI(
     title="DM-Bypass Pipeline API",
@@ -138,6 +138,3 @@ def pipeline_state():
     }
 
 
-frontend_dir = Path(__file__).parent.parent / "frontend"
-if frontend_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_dir), html=True), name="static")

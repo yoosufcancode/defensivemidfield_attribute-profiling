@@ -4,8 +4,9 @@ from typing import Any
 
 class FeatureSelectionRequest(BaseModel):
     features_path: str
+    team: str                              # filter to this team's half-match rows
     target_col: str = "bypasses_per_halftime"
-    n_top: int = 10
+    n_top: int = 15
 
 
 class FeatureSelectionResult(BaseModel):

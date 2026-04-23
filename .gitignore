@@ -7,7 +7,6 @@
 *.pyd
 *cpython-312.pyc
 *.png
-*.csv
 *.txt
 *.DS_Store
 /production/frontend/node_modules

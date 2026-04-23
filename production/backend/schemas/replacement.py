@@ -3,10 +3,17 @@ from typing import Optional
 
 
 class ReplacementRequest(BaseModel):
-    league: str                   # target team's league, e.g. "England"
-    team: str                     # target team name, e.g. "Manchester United"
+    league: str                            # target team's league, e.g. "England"
+    team: str                              # target team name, e.g. "Manchester United"
     top_n: int = 5
-    min_matches: int = 4          # minimum half-match rows — aligned with notebook MIN_MATCHES=4
+    min_matches: int = 4                   # minimum half-match rows — aligned with notebook MIN_MATCHES=4
+    bypass_ceiling_percentile: Optional[float] = None  # 0–100; None = auto (role-level median per role)
+    # Pre-computed from Stage 4 — if provided, skip per-team model training
+    scouting_grads: Optional[dict] = None
+    scouting_features: Optional[list] = None
+    model_selected: Optional[str] = None
+    spearman_test: Optional[float] = None
+    spearman_train: Optional[float] = None
 
 
 class ScoutingFeature(BaseModel):

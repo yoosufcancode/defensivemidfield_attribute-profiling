@@ -2,53 +2,127 @@ import { useState, useEffect } from 'react'
 import { usePipeline } from '../context/PipelineContext'
 import { usePoll } from '../hooks/usePoll'
 import { API } from '../lib/api'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card'
-import { Button } from './ui/button'
+import { Select, SelectGroup, SelectLabel, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
-import { Progress } from './ui/progress'
-import { Alert, AlertDescription } from './ui/alert'
-import { Badge } from './ui/badge'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './ui/select'
-import { cn } from '../lib/utils'
+import { AlertCircle, ChevronRight, ChevronDown, ChevronUp, TrendingDown, ArrowRight } from 'lucide-react'
 
-const ALL_LEAGUES = ['Spain', 'England', 'France', 'Germany', 'Italy']
+const BUCKET_COLORS = { DM: '#3B82F6', CM: '#A50044', AM: '#22C55E', Mixed: '#F59E0B', MF: '#64748B' }
+const ROLE_SHORT = r => (r || 'Unknown').split('-')[0].trim()
 
-const ROLE_VARIANTS = {
-  'Anchor 6': 'blue',
-  'Ball-winning 8': 'yellow',
-  'Hybrid 6/8': 'green',
-}
-
-function RoleBadge({ role }) {
-  return <Badge variant={ROLE_VARIANTS[role] || 'blue'}>{role || 'Unknown'}</Badge>
+function StatCard({ label, value, sub, highlight }) {
+  return (
+    <div
+      className="rounded-lg border p-4 space-y-1"
+      style={{
+        borderColor: highlight ? 'rgba(165,0,68,0.5)' : '#1A1A1A',
+        background: highlight ? 'rgba(165,0,68,0.12)' : '#111111',
+      }}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#64748B' }}>{label}</p>
+      <p className="text-[28px] font-bold leading-tight" style={{ color: highlight ? '#A50044' : '#FFFFFF' }}>{value ?? '—'}</p>
+      {sub && <p className="text-[11px]" style={{ color: '#475569' }}>{sub}</p>}
+    </div>
+  )
 }
 
 function ScoreBar({ value }) {
   const pct = Math.round(Math.max(0, Math.min(100, value || 0)))
-  const color = pct < 33 ? 'bg-green-500' : pct < 66 ? 'bg-yellow-500' : 'bg-red-500'
-  const textColor = pct < 33 ? 'text-green-400' : pct < 66 ? 'text-yellow-400' : 'text-red-400'
+  const color = pct < 33 ? '#22C55E' : pct < 66 ? '#F59E0B' : '#EF4444'
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-        <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
+      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#1A1A1A' }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span className={cn('text-xs font-mono w-8 text-right', textColor)}>{pct}</span>
+      <span className="text-xs font-mono w-8 text-right tabular-nums" style={{ color: '#64748B' }}>{pct}</span>
+    </div>
+  )
+}
+
+function BucketBadge({ bucket }) {
+  const color = BUCKET_COLORS[bucket] || '#64748B'
+  return (
+    <span
+      className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+      style={{ color, background: `${color}18`, border: `1px solid ${color}40` }}
+    >
+      {bucket}
+    </span>
+  )
+}
+
+function ReplacementRow({ candidate, rank }) {
+  const isTop = rank === 1
+  return (
+    <div
+      className="flex items-center gap-4 p-3 rounded-lg"
+      style={{
+        background: isTop ? 'rgba(165,0,68,0.08)' : 'rgba(255,255,255,0.02)',
+        border: `1px solid ${isTop ? 'rgba(165,0,68,0.3)' : '#1A1A1A'}`,
+      }}
+    >
+      <span className="text-xs font-mono w-5 text-center flex-shrink-0" style={{ color: isTop ? '#A50044' : '#2D3748' }}>
+        {rank}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold truncate" style={{ color: isTop ? '#FFFFFF' : '#94A3B8' }}>
+            {candidate.player_name}
+          </span>
+          {isTop && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex-shrink-0"
+              style={{ color: '#A50044', background: 'rgba(165,0,68,0.15)', border: '1px solid rgba(165,0,68,0.3)' }}>
+              Top Pick
+            </span>
+          )}
+        </div>
+        <p className="text-xs mt-0.5 truncate" style={{ color: '#475569' }}>
+          {candidate.team} · {candidate.league}
+        </p>
+      </div>
+      <BucketBadge bucket={candidate.position_bucket} />
+      <div className="text-right flex-shrink-0">
+        <p className="text-xs font-mono" style={{ color: '#94A3B8' }}>
+          {candidate.bypasses_per_half?.toFixed(2)} <span style={{ color: '#475569' }}>byp/h</span>
+        </p>
+        <p className="text-xs font-mono" style={{ color: '#22C55E' }}>
+          +{(candidate.improvement * 100).toFixed(1)}%
+        </p>
+      </div>
+      <div className="text-right flex-shrink-0 w-14">
+        <p className="text-lg font-bold font-mono leading-none"
+          style={{ color: candidate.bypass_score < 33 ? '#22C55E' : candidate.bypass_score < 66 ? '#F59E0B' : '#EF4444' }}>
+          {candidate.bypass_score?.toFixed(1)}
+        </p>
+        <p className="text-[9px] uppercase tracking-widest" style={{ color: '#2D3748' }}>score</p>
+      </div>
     </div>
   )
 }
 
 export default function Stage6Replacement() {
-  const { onStage6Done } = usePipeline()
+  const {
+    onStage6Done,
+    stage4League, stage4Team,
+    stage4ScoutingGrads, stage4ScoutingFeatures,
+    stage4ModelSelected, stage4SpearmanTest, stage4SpearmanTrain,
+  } = usePipeline()
   const { polling, progress, message, error, poll, reset } = usePoll()
 
-  const [league, setLeague] = useState('')
   const [team, setTeam] = useState('')
   const [topN, setTopN] = useState(5)
   const [minMatches, setMinMatches] = useState(10)
+  const [bypassCeilingPct, setBypassCeilingPct] = useState('')
   const [teamsByLeague, setTeamsByLeague] = useState({})
   const [result, setResult] = useState(null)
+  const [expandedPlayer, setExpandedPlayer] = useState(null)
+
+  const league = Object.entries(teamsByLeague).find(([, ts]) => ts.includes(team))?.[0] || ''
+
+  // Pre-fill team from Stage 4 once it's available
+  useEffect(() => {
+    if (stage4Team && !team) setTeam(stage4Team)
+  }, [stage4Team]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch(`${API}/stage1/teams`)
@@ -57,296 +131,342 @@ export default function Stage6Replacement() {
       .catch(() => {})
   }, [])
 
-  const teams = teamsByLeague[league] || []
+  const topReplacement = result?.recommendations?.[0]?.replacements?.[0]
+
+  // True when Stage 4 model matches the currently selected team
+  const usingStage4Model = !!(
+    stage4ScoutingGrads &&
+    stage4League === league &&
+    stage4Team   === team
+  )
 
   async function run() {
-    if (!league) return alert('Select a league.')
-    if (!team) return alert('Select a team.')
+    if (!team)   return alert('Select a team.')
     reset()
     setResult(null)
+    setExpandedPlayer(null)
     try {
+      const body = { league, team, top_n: topN, min_matches: minMatches }
+      if (bypassCeilingPct !== '') body.bypass_ceiling_percentile = Number(bypassCeilingPct)
+
+      // Pass Stage 4 pre-computed gradients to skip model re-training
+      if (usingStage4Model) {
+        body.scouting_grads    = stage4ScoutingGrads
+        body.scouting_features = stage4ScoutingFeatures
+        body.model_selected    = stage4ModelSelected
+        body.spearman_test     = stage4SpearmanTest
+        body.spearman_train    = stage4SpearmanTrain
+      }
+
       const r = await fetch(`${API}/stage6/find-replacements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ league, team, top_n: topN, min_matches: minMatches }),
+        body: JSON.stringify(body),
       })
       const { job_id } = await r.json()
-      poll(`${API}/stage6/status/${job_id}`, (res) => {
+      poll(`${API}/stage6/status/${job_id}`, res => {
         setResult(res)
         onStage6Done(res)
+        // Auto-expand the first (weakest) player
+        if (res.squad?.length) setExpandedPlayer(res.squad[0].player_name)
       })
     } catch (e) {
       alert(`Failed: ${e}`)
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Stage 6 — Replacement Finder</CardTitle>
-          <CardDescription>
-            Team-specific model selection + tactical role clustering + cross-league scouting.
-            Select a league and team — the pipeline analyzes the full squad automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>League</Label>
-              <Select value={league} onValueChange={v => { setLeague(v); setTeam('') }}>
-                <SelectTrigger><SelectValue placeholder="— select league —" /></SelectTrigger>
-                <SelectContent>
-                  {ALL_LEAGUES.map(lg => <SelectItem key={lg} value={lg}>{lg}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Team</Label>
-              <Select value={team} onValueChange={setTeam} disabled={!league || !teams.length}>
-                <SelectTrigger><SelectValue placeholder={league ? '— select team —' : '— select league first —'} /></SelectTrigger>
-                <SelectContent>
-                  {teams.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Top N replacements per player</Label>
-              <Input type="number" value={topN} min={1} max={20} onChange={e => setTopN(+e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Min half-match rows per player <span className="text-muted-foreground">(10 ≈ 5 full matches)</span></Label>
-              <Input type="number" value={minMatches} min={3} max={50} onChange={e => setMinMatches(+e.target.value)} />
-            </div>
-          </div>
-          <Button onClick={run} disabled={polling}>
-            {polling ? 'Running…' : 'Find Replacements'}
-          </Button>
-        </CardContent>
-      </Card>
+  // Position breakdown counts
+  const bucketCounts = result?.squad
+    ? ['DM', 'CM', 'AM', 'Mixed'].reduce((acc, b) => {
+        acc[b] = result.squad.filter(p => p.position_bucket === b).length
+        return acc
+      }, {})
+    : null
 
+  const stats = [
+    { label: 'Squad Size',       value: result?.squad?.length ?? '—',          sub: 'midfielders analysed' },
+    { label: 'Scouting Dims',    value: result?.scouting_features?.length ?? '—', sub: 'evaluation features' },
+    { label: 'Top Replacement',  value: topReplacement?.player_name?.split(' ').slice(-1)[0] ?? '—',
+      sub: topReplacement ? `${topReplacement.team} · ${topReplacement.league}` : '', highlight: true },
+    { label: 'Best Improvement', value: topReplacement ? `+${(topReplacement.improvement * 100).toFixed(1)}%` : '—', sub: 'bypass score delta' },
+  ]
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-[22px] font-bold text-white">Squad & Scout</h1>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-xs font-semibold" style={{ color: '#A50044' }}>Stage 6</span>
+            <span className="text-xs" style={{ color: '#475569' }}>·</span>
+            <span className="text-xs" style={{ color: '#64748B' }}>Tactical role clustering and cross-league replacement scouting</span>
+          </div>
+        </div>
+        <button
+          onClick={run}
+          disabled={polling || !team}
+          className="flex items-center gap-2 text-white disabled:opacity-50 transition-opacity hover:opacity-90"
+          style={{ background: '#A50044', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: (polling || !team) ? 'not-allowed' : 'pointer' }}
+        >
+          {polling ? 'Running…' : 'Find Replacements'} <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div style={{ height: 1, background: '#1A1A1A' }} />
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        {stats.map(s => <StatCard key={s.label} {...s} />)}
+      </div>
+
+      {/* Stage 4 model badge */}
+      {usingStage4Model && (
+        <div
+          className="rounded-lg p-3 flex items-center gap-2 text-xs font-semibold"
+          style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#22C55E' }}
+        >
+          <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: '#22C55E' }} />
+          Using Stage 4 model for <strong className="ml-1">{stage4Team}</strong> — model re-training will be skipped
+        </div>
+      )}
+
+      {/* Config */}
+      <div className="rounded-lg border border-border bg-card p-5 flex items-end gap-6 flex-wrap">
+        <div className="space-y-1.5 flex-1 min-w-44">
+          <Label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#64748B' }}>Team</Label>
+          <Select value={team} onValueChange={setTeam}>
+            <SelectTrigger className="bg-secondary/50 border-border h-9 text-sm">
+              <SelectValue placeholder="— select team —" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(teamsByLeague).map(([lg, ts]) => (
+                <SelectGroup key={lg}>
+                  <SelectLabel>{lg}</SelectLabel>
+                  {ts.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5 w-28">
+          <Label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#64748B' }}>Top N</Label>
+          <Input type="number" value={topN} min={1} max={20} onChange={e => setTopN(+e.target.value)} className="bg-secondary/50 border-border h-9 text-sm" />
+        </div>
+        <div className="space-y-1.5 w-28">
+          <Label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#64748B' }}>Min Matches</Label>
+          <Input type="number" value={minMatches} min={3} max={50} onChange={e => setMinMatches(+e.target.value)} className="bg-secondary/50 border-border h-9 text-sm" />
+        </div>
+        <div className="space-y-1.5 w-36">
+          <Label className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#64748B' }}>Bypass Ceiling %</Label>
+          <Input
+            type="number"
+            value={bypassCeilingPct}
+            min={1} max={99}
+            placeholder="auto"
+            onChange={e => setBypassCeilingPct(e.target.value)}
+            className="bg-secondary/50 border-border h-9 text-sm"
+          />
+          <p className="text-[10px]" style={{ color: '#475569' }}>blank = per-role median</p>
+        </div>
+      </div>
+
+      {/* Progress */}
       {polling && (
-        <Card>
-          <CardContent className="pt-6 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{message}</span>
-              <span className="text-primary font-mono">{progress}%</span>
-            </div>
-            <Progress value={progress} />
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">{message}</span>
+            <span className="font-mono" style={{ color: '#A50044' }}>{progress}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: '#A50044' }} />
+          </div>
+        </div>
       )}
 
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>Error: {error}</AlertDescription>
-        </Alert>
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-red-400">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />{error}
+        </div>
       )}
 
       {result && (
         <>
-          <Card>
-            <CardContent className="pt-6 flex flex-wrap items-center gap-4">
-              <div>
-                <span className="text-muted-foreground text-sm">Team:</span>
-                <span className="font-semibold ml-1">{result.team}</span>
-                <span className="text-muted-foreground text-sm ml-1">({result.league})</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-sm">Model:</span>
-                <Badge variant="green" className="ml-1">{result.model_selected}</Badge>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-sm">Spearman ρ test:</span>
-                <span className={cn('font-mono font-semibold ml-1', result.spearman_test >= 0.3 ? 'text-green-400' : 'text-yellow-400')}>
-                  {result.spearman_test?.toFixed(4)}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-sm">train:</span>
-                <span className="font-mono ml-1">{result.spearman_train?.toFixed(4)}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {(result.scouting_features || []).length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-sm">Scouting Features ({result.scouting_features.length})</CardTitle></CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Feature</TableHead>
-                      <TableHead className="text-center">Gradient</TableHead>
-                      <TableHead className="text-center">Direction</TableHead>
-                      <TableHead className="text-center">p-value</TableHead>
-                      <TableHead className="text-center">Sign stable</TableHead>
-                      <TableHead>Confidence</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {result.scouting_features.map((f, i) => (
-                      <TableRow key={f.feature} className={i % 2 === 0 ? 'bg-secondary/20' : ''}>
-                        <TableCell className="font-mono text-xs">{f.feature}</TableCell>
-                        <TableCell className={cn('text-center font-mono text-xs', f.gradient > 0 ? 'text-red-400' : 'text-green-400')}>{f.gradient?.toFixed(4)}</TableCell>
-                        <TableCell className="text-center text-xs text-muted-foreground">{f.direction}</TableCell>
-                        <TableCell className={cn('text-center font-mono text-xs', f.p_value < 0.05 ? 'text-green-400' : f.p_value < 0.15 ? 'text-yellow-400' : 'text-red-400')}>{f.p_value?.toFixed(4)}</TableCell>
-                        <TableCell className="text-center">{f.sign_stable ? <span className="text-green-400">✓</span> : <span className="text-yellow-400">~</span>}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{f.confidence_tier}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          {(result.squad || []).length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">{result.team} — Squad Bypass Scores</CardTitle>
-                <p className="text-xs text-muted-foreground">Score = league percentile rank. Lower = better bypass prevention.</p>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Player</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead className="text-center">Pos</TableHead>
-                      <TableHead className="text-center">AvgX</TableHead>
-                      <TableHead className="min-w-[140px]">Bypass Score</TableHead>
-                      <TableHead className="text-center">Halves</TableHead>
-                      <TableHead className="text-center">Bypasses/half</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {result.squad.map((p, i) => (
-                      <TableRow key={p.player_name} className={i % 2 === 0 ? 'bg-secondary/20' : ''}>
-                        <TableCell className="font-semibold">{p.player_name}</TableCell>
-                        <TableCell><RoleBadge role={p.tactical_role} /></TableCell>
-                        <TableCell className="text-center text-muted-foreground">{p.position_bucket}</TableCell>
-                        <TableCell className="text-center font-mono text-xs text-muted-foreground">{p.average_position_x?.toFixed(1) ?? '—'}</TableCell>
-                        <TableCell><ScoreBar value={p.bypass_score} /></TableCell>
-                        <TableCell className="text-center text-muted-foreground">{p.halves_played}</TableCell>
-                        <TableCell className={cn('text-center font-mono text-xs', p.bypasses_per_half > 6 ? 'text-red-400' : '')}>{p.bypasses_per_half?.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          {(result.recommendations || []).map(rec => {
-            const p = rec.target_player
-            const replacements = rec.replacements || []
-            return (
-              <Card key={p.player_name}>
-                <CardContent className="pt-6">
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <span className="text-base font-semibold">{p.player_name}</span>
-                    <RoleBadge role={p.tactical_role} />
-                    <Badge variant="blue">{p.position_bucket}</Badge>
-                    <span className="text-muted-foreground text-sm">AvgX {p.average_position_x?.toFixed(1) ?? '—'}</span>
-                    <div className="ml-auto flex gap-4 text-right">
-                      <div>
-                        <div className={cn('text-xl font-bold', p.bypass_score > 66 ? 'text-red-400' : p.bypass_score > 33 ? 'text-yellow-400' : 'text-green-400')}>
-                          {p.bypass_score?.toFixed(1)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">bypass score</div>
-                      </div>
-                      <div>
-                        <div className="text-xl font-bold text-orange-400">{p.bypasses_per_half?.toFixed(2)}</div>
-                        <div className="text-xs text-muted-foreground">bypasses/half</div>
-                      </div>
-                    </div>
+          {/* Squad overview — full width table with expandable replacement rows */}
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            {/* Section header */}
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #1A1A1A' }}>
+              <h2 className="text-sm font-semibold text-white">Current Midfield Squad</h2>
+              <div className="flex items-center gap-4">
+                {bucketCounts && Object.entries(bucketCounts).filter(([, v]) => v > 0).map(([b, v]) => (
+                  <div key={b} className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full" style={{ background: BUCKET_COLORS[b] }} />
+                    <span className="text-xs font-mono" style={{ color: '#64748B' }}>{b} <strong style={{ color: '#FFFFFF' }}>{v}</strong></span>
                   </div>
+                ))}
+                <span className="text-xs" style={{ color: '#475569' }}>Click a player to see replacements</span>
+              </div>
+            </div>
 
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Match filter: <span className="text-foreground/70">{rec.match_filter}</span>
-                  </p>
+            {/* Table */}
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: '1px solid #1A1A1A' }}>
+                  {['#', 'Player', 'Role', 'Position', 'Bypasses/Half', 'Score', 'Score Bar', 'Status'].map(h => (
+                    <th key={h} className="text-left py-2.5 px-4 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#64748B' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(result.squad || []).map((p, i) => {
+                  const rec = result.recommendations?.find(r => r.target_player?.player_name === p.player_name)
+                  const replacements = rec?.replacements || []
+                  const isExpanded = expandedPlayer === p.player_name
 
-                  {replacements.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No candidates found with lower bypass score in this role + position.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {replacements.map(c => {
-                        const fc = c.feature_comparison || {}
-                        const fcKeys = Object.keys(fc)
-                        return (
-                          <div key={c.player_name} className="bg-secondary/30 rounded-lg p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-muted-foreground text-xs font-mono">#{c.rank}</span>
-                                  <span className="font-semibold">{c.player_name}</span>
-                                  <Badge variant="blue" className="text-xs">{c.team}</Badge>
-                                  <span className="text-xs text-muted-foreground">{c.league}</span>
-                                  <RoleBadge role={c.tactical_role} />
-                                  <Badge variant="blue">{c.position_bucket}</Badge>
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-1">AvgX {c.average_position_x?.toFixed(1) ?? '—'}</div>
+                  return (
+                    <>
+                      <tr
+                        key={p.player_name}
+                        onClick={() => setExpandedPlayer(isExpanded ? null : p.player_name)}
+                        style={{
+                          borderBottom: isExpanded ? 'none' : '1px solid #1A1A1A',
+                          background: isExpanded ? 'rgba(165,0,68,0.05)' : p.is_weak ? 'rgba(239,68,68,0.04)' : 'transparent',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = '#161616' }}
+                        onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = p.is_weak ? 'rgba(239,68,68,0.04)' : 'transparent' }}
+                      >
+                        <td className="py-3 px-4 font-mono text-xs" style={{ color: '#2D3748', width: 40 }}>{i + 1}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-white">{p.player_name}</span>
+                            {p.is_weak && (
+                              <div className="flex items-center gap-1">
+                                <TrendingDown className="h-3 w-3" style={{ color: '#EF4444' }} />
+                                <span className="text-[10px]" style={{ color: '#EF4444' }}>Weak</span>
                               </div>
-                              <div className="flex gap-4 text-right">
-                                <div>
-                                  <div className="text-lg font-bold text-green-400">{c.bypass_score?.toFixed(1)}</div>
-                                  <div className="text-xs text-muted-foreground">score</div>
-                                </div>
-                                <div>
-                                  <div className="text-lg font-bold text-primary">+{c.improvement?.toFixed(3)}</div>
-                                  <div className="text-xs text-muted-foreground">improvement</div>
-                                </div>
-                                <div>
-                                  <div className="text-lg font-bold text-orange-400">{c.bypasses_per_half?.toFixed(2)}</div>
-                                  <div className="text-xs text-muted-foreground">bypasses/half</div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {fcKeys.length > 0 && (
-                              <details className="mt-2">
-                                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                                  Feature comparison vs {p.player_name}
-                                </summary>
-                                <Table className="mt-2 text-xs">
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead className="text-xs">Feature</TableHead>
-                                      <TableHead className="text-right text-xs">Candidate</TableHead>
-                                      <TableHead className="text-right text-xs">Target</TableHead>
-                                      <TableHead className="text-right text-xs">Δ</TableHead>
-                                      <TableHead className="text-xs pl-2">Direction</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {fcKeys.map(f => {
-                                      const v = fc[f]
-                                      return (
-                                        <TableRow key={f}>
-                                          <TableCell className="font-mono text-xs py-0.5">{f}</TableCell>
-                                          <TableCell className="text-right font-mono text-xs">{v.candidate?.toFixed(3)}</TableCell>
-                                          <TableCell className="text-right font-mono text-xs text-muted-foreground">{v.target?.toFixed(3)}</TableCell>
-                                          <TableCell className={cn('text-right font-mono text-xs', (v.delta ?? 0) > 0 ? 'text-green-400' : 'text-red-400')}>
-                                            {(v.delta ?? 0) > 0 ? '+' : ''}{v.delta?.toFixed(3)}
-                                          </TableCell>
-                                          <TableCell className="pl-2 text-xs text-muted-foreground">{v.direction || ''}</TableCell>
-                                        </TableRow>
-                                      )
-                                    })}
-                                  </TableBody>
-                                </Table>
-                              </details>
                             )}
                           </div>
-                        )
-                      })}
+                          {p.is_weak && p.weakness_reason && (
+                            <p className="text-[10px] mt-0.5 truncate max-w-xs" style={{ color: '#475569' }}>{p.weakness_reason}</p>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-xs font-mono" style={{ color: '#64748B' }}>{ROLE_SHORT(p.tactical_role)}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <BucketBadge bucket={p.position_bucket} />
+                        </td>
+                        <td className="py-3 px-4 font-mono text-xs" style={{ color: '#94A3B8' }}>
+                          {p.bypasses_per_half?.toFixed(3)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-base font-bold font-mono"
+                            style={{ color: p.bypass_score < 33 ? '#22C55E' : p.bypass_score < 66 ? '#F59E0B' : '#EF4444' }}>
+                            {p.bypass_score?.toFixed(1)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 w-36">
+                          <ScoreBar value={p.bypass_score} />
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            {replacements.length > 0 ? (
+                              <span className="text-xs px-2 py-1 rounded" style={{ background: '#1A1A1A', color: '#64748B' }}>
+                                {replacements.length} found
+                              </span>
+                            ) : (
+                              <span className="text-xs" style={{ color: '#2D3748' }}>—</span>
+                            )}
+                            {isExpanded
+                              ? <ChevronUp className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#A50044' }} />
+                              : <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#2D3748' }} />
+                            }
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expanded replacement rows */}
+                      {isExpanded && replacements.length > 0 && (
+                        <tr key={`${p.player_name}-recs`}>
+                          <td colSpan={8} className="px-4 pb-4 pt-2" style={{ borderBottom: '1px solid #1A1A1A', background: 'rgba(165,0,68,0.03)' }}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <ArrowRight className="h-3.5 w-3.5" style={{ color: '#A50044' }} />
+                              <span className="text-xs font-semibold" style={{ color: '#A50044' }}>
+                                Replacements for {p.player_name}
+                              </span>
+                              <span className="text-xs" style={{ color: '#475569' }}>
+                                · {rec?.match_filter}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2">
+                              {replacements.slice(0, topN).map((c, ci) => (
+                                <ReplacementRow key={c.player_name} candidate={c} rank={ci + 1} />
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {isExpanded && replacements.length === 0 && (
+                        <tr key={`${p.player_name}-empty`}>
+                          <td colSpan={8} className="px-4 py-3" style={{ borderBottom: '1px solid #1A1A1A', background: 'rgba(165,0,68,0.03)' }}>
+                            <p className="text-xs" style={{ color: '#475569' }}>No replacement candidates found for this player's profile.</p>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Scouting features used */}
+          {result.scouting_features?.length > 0 && (
+            <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-white">Scouting Dimensions</h2>
+                <div className="flex items-center gap-3 text-xs" style={{ color: '#64748B' }}>
+                  <span>Model: <strong style={{ color: '#FFFFFF' }}>{result.model_selected}</strong></span>
+                  <span>Spearman ρ test: <strong style={{ color: '#A50044' }}>{result.spearman_test?.toFixed(3)}</strong></span>
+                  <span>train: <strong style={{ color: '#94A3B8' }}>{result.spearman_train?.toFixed(3)}</strong></span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {result.scouting_features.map(sf => (
+                  <div
+                    key={sf.feature}
+                    className="flex items-center justify-between p-3 rounded-lg"
+                    style={{ background: '#111111', border: '1px solid #1A1A1A' }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-mono text-white truncate">{sf.feature}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span
+                          className="text-[10px] font-semibold"
+                          style={{ color: sf.direction === 'lower_is_better' ? '#22C55E' : '#A50044' }}
+                        >
+                          {sf.direction === 'lower_is_better' ? '↓ Lower is better' : '↑ Higher is better'}
+                        </span>
+                        <span className="text-[10px]" style={{ color: '#2D3748' }}>
+                          {sf.confidence_tier}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+                    <div className="text-right flex-shrink-0 ml-3">
+                      <p className="text-xs font-mono" style={{ color: '#475569' }}>
+                        p = {sf.p_value < 0.001 ? '<0.001' : sf.p_value?.toFixed(3)}
+                      </p>
+                      <p className="text-xs font-mono" style={{ color: '#64748B' }}>
+                        ∂y/∂x {sf.gradient >= 0 ? '+' : ''}{sf.gradient?.toFixed(4)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

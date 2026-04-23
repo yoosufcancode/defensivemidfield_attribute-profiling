@@ -8,15 +8,21 @@ From the project root:
 uvicorn production.backend.api.main:app --reload --port 8000
 ```
 
-## How to run frontend
-
-The frontend is a static site. Open `production/frontend/index.html` directly in a browser, or serve it with:
+From inside `production/backend/`:
 
 ```bash
-cd production/frontend
-python -m http.server 3000
+uvicorn api.main:app --reload --port 8000
 ```
 
-Then open `http://localhost:3000`.
+## How to run frontend
 
-> The frontend expects the backend running at `http://localhost:8000`.
+From `production/frontend/`:
+
+```bash
+npm install   # first time only
+npm run dev
+```
+
+Then open `http://localhost:5173`.
+
+> The Vite dev server proxies `/api` requests to `http://localhost:8000`, so the backend must also be running.

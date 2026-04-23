@@ -41,5 +41,5 @@ export function usePoll() {
     setError(null)
   }, [])
 
-  return { polling, progress, message, error, poll, reset }
+  return { polling, progress, message, error, setError, poll, reset }
 }

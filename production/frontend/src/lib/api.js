@@ -17,6 +17,6 @@ export function startPolling(statusUrl, onProgress, onDone, onError) {
       clearInterval(interval)
       onError(String(e))
     }
-  }, 2000)
+  }, 1000)
   return () => clearInterval(interval)
 }

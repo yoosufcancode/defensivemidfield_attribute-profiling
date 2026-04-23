@@ -9,10 +9,10 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from production.backend.api.dependencies import get_task_store, get_executor
-from production.backend.services.task_store import TaskStore
-from production.backend.schemas.feature_selection import FeatureSelectionRequest
-from production.backend.workers.pipeline_worker import run_stage3
+from api.dependencies import get_task_store, get_executor
+from services.task_store import TaskStore
+from schemas.feature_selection import FeatureSelectionRequest
+from workers.pipeline_worker import run_stage3
 
 router = APIRouter(prefix="/stage3", tags=["Stage 3 – Feature Selection"])
 
@@ -44,8 +44,9 @@ async def select_features(
             job_id=job_id,
             params={
                 "features_path": body.features_path,
-                "target_col": body.target_col,
-                "n_top": body.n_top,
+                "team":          body.team,
+                "target_col":    body.target_col,
+                "n_top":         body.n_top,
             },
             store=store,
             executor=executor,
