@@ -25,13 +25,18 @@ def _loocv_spearman(model, X: pd.DataFrame, y: pd.Series) -> tuple[float, float]
         m = type(model)(**safe_params)
         m.fit(X.iloc[tr_idx], y.iloc[tr_idx])
         y_pred[te_idx] = m.predict(X.iloc[te_idx])
+    if np.std(y_pred) == 0 or np.std(y) == 0:
+        return 0.0, 1.0
     rho, p = spearmanr(y, y_pred)
     return float(rho), float(p)
 
 
 def _test_metrics(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
     preds = model.predict(X_test)
-    rho, p = spearmanr(y_test, preds)
+    if np.std(preds) == 0 or np.std(y_test) == 0:
+        rho, p = 0.0, 1.0
+    else:
+        rho, p = spearmanr(y_test, preds)
     r2   = r2_score(y_test, preds) if y_test.var() > 0 else 0.0
     rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
     mae  = float(mean_absolute_error(y_test, preds))
@@ -103,7 +108,13 @@ def run_model_building(
     ridge = RidgeCV(alphas=alphas_ridge, cv=5).fit(X_train, y_train)
 
     progress_cb(36, "Training Lasso (CV)")
-    lasso = LassoCV(alphas=alphas_lasso, cv=5, max_iter=2000, random_state=42).fit(X_train, y_train)
+    lasso_cv = LassoCV(alphas=alphas_lasso, cv=5, max_iter=2000, random_state=42).fit(X_train, y_train)
+    # If CV selected the ceiling alpha, all coefficients are zero — fall back to the
+    # lowest alpha so Lasso still produces meaningful predictions for this dataset.
+    if lasso_cv.alpha_ >= alphas_lasso[-1] * 0.99:
+        lasso = Lasso(alpha=float(alphas_lasso[0]), max_iter=2000).fit(X_train, y_train)
+    else:
+        lasso = lasso_cv
 
     models_map = {"MLR": mlr, "Ridge": ridge, "Lasso": lasso}
 

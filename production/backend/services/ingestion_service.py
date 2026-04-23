@@ -5,14 +5,18 @@ from typing import Callable
 
 _ESCAPE_RE = re.compile(r'\\u([0-9a-fA-F]{4})')
 
+def _decode_unicode_escapes(s):
+    if not isinstance(s, str):
+        return s
+    return _ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 16)), s)
+
+
 def _decode_player_names(df):
-    """Decode literal \\uXXXX sequences in player_name that Wyscout stores as plain text."""
-    if "player_name" not in df.columns:
-        return df
+    """Decode literal \\uXXXX sequences in string columns that Wyscout stores as plain text."""
     df = df.copy()
-    df["player_name"] = df["player_name"].map(
-        lambda s: _ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 16)), s) if isinstance(s, str) else s
-    )
+    for col in ("player_name", "team_name"):
+        if col in df.columns:
+            df[col] = df[col].map(_decode_unicode_escapes)
     return df
 
 ALL_LEAGUES = ["Spain", "England", "France", "Germany", "Italy"]
