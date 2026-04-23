@@ -185,8 +185,8 @@ def run_model_building(
         rows.append({"feature": fname, "mean_coef": mean_b,
                      "p_value": pval, "sign_stable": sign_stable})
 
-    # Fallback — ensure at least 8 scouting features
-    MIN_SCOUT = 8
+    # Fallback — ensure at least 6 scouting features
+    MIN_SCOUT = 6
     if len(scouting_grads) < MIN_SCOUT:
         needed = MIN_SCOUT - len(scouting_grads)
         extras = sorted(
