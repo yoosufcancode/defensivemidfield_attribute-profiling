@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import re
 import warnings
 import sys
 import numpy as np
@@ -99,6 +100,11 @@ ROLE_FEATURES = [
 def load_half_match(csv_path: Path, team: str = None) -> pd.DataFrame:
     """Load half-match CSV rows directly (no aggregation)."""
     df = pd.read_csv(csv_path)
+    if "team_name" in df.columns:
+        _esc = re.compile(r'\\u([0-9a-fA-F]{4})')
+        df["team_name"] = df["team_name"].map(
+            lambda s: _esc.sub(lambda m: chr(int(m.group(1), 16)), s) if isinstance(s, str) else s
+        )
     if team:
         df = df[df["team_name"] == team].copy()
         if df.empty:

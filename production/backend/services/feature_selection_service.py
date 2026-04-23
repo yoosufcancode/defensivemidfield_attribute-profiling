@@ -111,6 +111,11 @@ def run_feature_selection(
     progress_cb(8, f"Filtering to {team} rows")
     if "team_name" not in df.columns:
         raise ValueError("Dataset has no 'team_name' column — re-run Stage 1 ingestion.")
+    import re as _re
+    _esc = _re.compile(r'\\u([0-9a-fA-F]{4})')
+    def _decode(s):
+        return _esc.sub(lambda m: chr(int(m.group(1), 16)), s) if isinstance(s, str) else s
+    df["team_name"] = df["team_name"].map(_decode)
     df = df[df["team_name"] == team].copy()
     if df.empty:
         available = sorted(pd.read_csv(features_path)["team_name"].dropna().unique())
