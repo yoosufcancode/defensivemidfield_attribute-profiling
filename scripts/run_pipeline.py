@@ -122,7 +122,7 @@ def prepare(df: pd.DataFrame, target: str, min_passes: int = 5) -> tuple:
     )
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X_scaled, y, test_size=0.15, random_state=42
+        X_scaled, y, test_size=0.10, random_state=42
     )
     print(f"Train: {len(X_train):,}  Test: {len(X_test):,}\n")
 

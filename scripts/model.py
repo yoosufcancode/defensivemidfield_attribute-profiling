@@ -53,11 +53,11 @@ def load_data(
 def split_data(
     X: pd.DataFrame,
     y: pd.Series,
-    test_size: float = 0.15,
+    test_size: float = 0.10,
     random_state: int = 42,
     shuffle: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     """Split data into training and test sets.
-    
+
     Parameters
     ----------
     X, y : DataFrame, Series
@@ -86,7 +86,7 @@ def split_data(
 
 def load_and_split(
     data_path: Union[str, Path],
-    test_size: float = 0.15,
+    test_size: float = 0.10,
     random_state: int = 42,
     target_col: str = 'bypasses_per_halftime',
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, List[str]]:
