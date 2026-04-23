@@ -166,7 +166,7 @@ def run_model_building(
         elif best_name == "Ridge":
             m_fold = Ridge(alpha=float(best_model.alpha_))
         else:
-            m_fold = Lasso(alpha=float(best_model.alpha_), max_iter=2000)
+            m_fold = Lasso(alpha=float(getattr(best_model, "alpha_", best_model.alpha)), max_iter=2000)
         m_fold.fit(X_train.iloc[tr_idx], y_train.iloc[tr_idx])
         fold_coefs.append(m_fold.coef_)
 
