@@ -4,6 +4,7 @@ Stage 4 router — model building.
   POST /stage4/build               trigger model building job
   GET  /stage4/status/{job_id}     poll job status
 """
+import math
 import uuid
 import asyncio
 
@@ -17,6 +18,17 @@ from workers.pipeline_worker import run_stage4
 router = APIRouter(prefix="/stage4", tags=["Stage 4 – Model Building"])
 
 
+def _sanitize(obj):
+    """Recursively replace NaN/Inf floats with None so the response is JSON-safe."""
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(v) for v in obj]
+    return obj
+
+
 def task_response(record) -> dict:
     """Serialize a TaskRecord to a status response dict."""
     return {
@@ -24,7 +36,7 @@ def task_response(record) -> dict:
         "status": record.status,
         "progress": record.progress,
         "message": record.message,
-        "result": record.result,
+        "result": _sanitize(record.result),
         "error": record.error,
     }
 
